@@ -1,0 +1,19 @@
+[project]
+name = "gnn-explainability-ui"
+version = "0.1.0"
+description = "Interactive UI for visualizing and comparing GNN explanation methods"
+readme = "README.md"
+requires-python = ">=3.9,<3.13"
+dependencies = [
+    "flask>=1.1.2",
+    "flask-cors>=3.0.10",
+    "torch>=1.10",
+    "torch-geometric",
+    "captum>=0.3.0",
+    "networkx>=2.4",
+    "numpy>=1.19",
+    "pandas>=1.0",
+    "pgmpy>=0.1.11",
+    "scipy>=1.5",
+    "tqdm>=4.46",
+]

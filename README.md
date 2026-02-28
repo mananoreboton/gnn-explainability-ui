@@ -4,19 +4,18 @@
 You can see the demo [here](https://explainer.m30m.me)
 
 ## How to run this project
-### Running the project
-1. Clone the github repo
-1. Install the python requirements: `pip install -r requirements.txt`
-1. Install torch-geometric. You can use [this](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) tutorial.
-1. Change to `web` directory: `cd web`
-1. Install the node modules: `npm install` (you need to install npm first)
-1. Run the Vue app with command `npm run build`
-1. Return to the main directory `cd ..`
-1. Run the server with `python web_service.py` command. The server will listen to port 5000 on all networks by default.
-The UI should be accessible from `http://localhost:5000`
-### Running the frontend for development
-1. Run the Vue app with command `npm run serve`. The frontend is accessible at `http://localhost:8080/`
-and tries to communicate with backend at `http://localhost:5000`.
+
+### Production (built frontend + backend)
+1. Clone the repo
+2. Install Python dependencies: `uv sync` ([uv](https://docs.astral.sh/uv/) required)
+3. Build the frontend: `cd web && npm install && npm run build && cd ..`
+4. Start the server: `uv run python web_service.py`
+5. Open `http://localhost:5000` (server listens on all interfaces)
+
+### Development (hot-reload frontend)
+1. Start the backend: `uv run python web_service.py` (in project root)
+2. In another terminal: `cd web && npm run serve`
+3. Open `http://localhost:8080` (frontend talks to backend at `http://localhost:5000`)
 
 
 ## How to add new experiments
