@@ -4,6 +4,19 @@ from explainers.node_methods import methods as node_methods
 from explainers.graph_methods import methods as graph_methods
 
 
+def remap_graphconv_state_dict(state_dict):
+    """Remap old GraphConv keys (lin_l, lin_r) to new PyG API (lin_rel, lin_root)."""
+    remapped = {}
+    for k, v in state_dict.items():
+        if '.lin_l.' in k:
+            remapped[k.replace('.lin_l.', '.lin_rel.')] = v
+        elif '.lin_r.' in k:
+            remapped[k.replace('.lin_r.', '.lin_root.')] = v
+        else:
+            remapped[k] = v
+    return remapped
+
+
 class BaseExperiment:
     def category_to_tensor(self, category):
         raise NotImplemented

@@ -4,7 +4,7 @@ from torch.nn import Linear
 from torch_geometric.datasets import TUDataset
 from torch_geometric.nn import global_add_pool, GraphConv
 
-from experiments.base import BaseExperiment
+from experiments.base import BaseExperiment, remap_graphconv_state_dict
 
 
 class Net(torch.nn.Module):
@@ -44,7 +44,8 @@ class Mutag(BaseExperiment):
     def __init__(self) -> None:
         super().__init__()
         model = Net(32, num_classes=2, num_features=14)
-        model.load_state_dict(torch.load('experiments/mutag.pt'))
+        state = torch.load('experiments/mutag.pt', map_location='cpu', weights_only=True)
+        model.load_state_dict(remap_graphconv_state_dict(state))
         model.eval()
         self.model = model
 

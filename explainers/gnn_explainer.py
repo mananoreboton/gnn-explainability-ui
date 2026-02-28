@@ -1,156 +1,84 @@
+"""GNNExplainer wrappers using torch_geometric.explain API (PyG 2.3+)."""
+
 import torch
-from torch_geometric.nn import GNNExplainer
-from tqdm import tqdm
-
-EPS = 1e-15
+from torch_geometric.explain import Explainer
+from torch_geometric.explain.algorithm import GNNExplainer as GNNExplainerAlgo
 
 
-class TargetedGNNExplainer(GNNExplainer):
-    def __loss__(self, node_idx, log_logits, target_class):
-        loss = -log_logits[node_idx, target_class]
+def _create_explainer(model, task_level, epochs=200, log=False, **kwargs):
+    """Create Explainer with GNNExplainer algorithm for the given task level."""
+    algorithm = GNNExplainerAlgo(epochs=epochs, log=log, **kwargs)
+    return Explainer(
+        model=model,
+        algorithm=algorithm,
+        explanation_type="phenomenon",
+        node_mask_type="attributes",
+        edge_mask_type="object",
+        model_config=dict(
+            mode="multiclass_classification",
+            task_level=task_level,
+            return_type="log_probs",
+        ),
+    )
 
-        m = self.edge_mask.sigmoid()
-        loss = loss + self.coeffs['edge_size'] * m.sum()
-        ent = -m * torch.log(m + EPS) - (1 - m) * torch.log(1 - m + EPS)
-        loss = loss + self.coeffs['edge_ent'] * ent.mean()
 
-        m = self.node_feat_mask.sigmoid()
-        loss = loss + self.coeffs['node_feat_size'] * m.sum()
-        ent = -m * torch.log(m + EPS) - (1 - m) * torch.log(1 - m + EPS)
-        loss = loss + self.coeffs['node_feat_ent'] * ent.mean()
+class TargetedGNNExplainer:
+    """Wrapper that provides explain_node_with_target using PyG Explainer API."""
 
-        return loss
+    def __init__(self, model, epochs=200, log=False, **kwargs):
+        self.model = model
+        self.epochs = epochs
+        self.log = log
+        self.coeffs = {}
+        self.coeffs.update(kwargs)
 
     def explain_node_with_target(self, node_idx, x, edge_index, target_class, **kwargs):
-        r"""Learns and returns a node feature mask and an edge mask that play a
-        crucial role to explain the prediction made by the GNN for node
-        :attr:`node_idx`.
-
-        Args:
-            node_idx (int): The node to explain.
-            x (Tensor): The node feature matrix.
-            edge_index (LongTensor): The edge indices.
-            **kwargs (optional): Additional arguments passed to the GNN module.
-
-        :rtype: (:class:`Tensor`, :class:`Tensor`)
-        """
-
-        self.model.eval()
-        self.__clear_masks__()
-
-        num_edges = edge_index.size(1)
-
-        # Only operate on a k-hop subgraph around `node_idx`.
-        x, edge_index, mapping, hard_edge_mask, kwargs = self.__subgraph__(
-            node_idx, x, edge_index, **kwargs)
-
-        # Get the initial prediction.
-        if target_class is None:
-            with torch.no_grad():
-                log_logits = self.model(x=x, edge_index=edge_index, **kwargs)
-                pred_label = log_logits.argmax(dim=-1)
-                target_class = pred_label[mapping].item()
-
-        self.__set_masks__(x, edge_index)
-        self.to(x.device)
-
-        optimizer = torch.optim.Adam([self.node_feat_mask, self.edge_mask],
-                                     lr=self.lr)
-
-        if self.log:  # pragma: no cover
-            pbar = tqdm(total=self.epochs)
-            pbar.set_description(f'Explain node {node_idx}')
-
-        for epoch in range(1, self.epochs + 1):
-            optimizer.zero_grad()
-            h = x * self.node_feat_mask.view(1, -1).sigmoid()
-            log_logits = self.model(x=h, edge_index=edge_index, **kwargs)
-            loss = self.__loss__(mapping, log_logits, target_class)
-            loss.backward()
-            optimizer.step()
-
-            if self.log:  # pragma: no cover
-                pbar.update(1)
-
-        if self.log:  # pragma: no cover
-            pbar.close()
-
-        node_feat_mask = self.node_feat_mask.detach().sigmoid()
-        edge_mask = self.edge_mask.new_zeros(num_edges)
-        edge_mask[hard_edge_mask] = self.edge_mask.detach().sigmoid()
-
-        self.__clear_masks__()
-
+        explainer = _create_explainer(
+            self.model,
+            task_level="node",
+            epochs=self.epochs,
+            log=self.log,
+            **self.coeffs,
+        )
+        target = torch.tensor([target_class], dtype=torch.long, device=x.device)
+        explanation = explainer(x, edge_index, target=target, index=node_idx, **kwargs)
+        node_feat_mask = explanation.node_feat_mask
+        edge_mask = explanation.edge_mask
+        if node_feat_mask is None:
+            node_feat_mask = torch.ones(1, x.size(1), device=x.device)
+        if edge_mask is None:
+            edge_mask = torch.ones(edge_index.size(1), device=x.device)
+        if node_feat_mask.dim() == 1:
+            node_feat_mask = node_feat_mask.unsqueeze(0)
         return node_feat_mask, edge_mask
 
 
-class TargetedGNNExplainerGraph(GNNExplainer):
-    def __loss__(self, node_idx, log_logits, target_class):
-        loss = -log_logits[0, target_class]
+class TargetedGNNExplainerGraph:
+    """Wrapper that provides explain_with_target using PyG Explainer API."""
 
-        m = self.edge_mask.sigmoid()
-        loss = loss + self.coeffs['edge_size'] * m.sum()
-        ent = -m * torch.log(m + EPS) - (1 - m) * torch.log(1 - m + EPS)
-        loss = loss + self.coeffs['edge_ent'] * ent.mean()
-
-        m = self.node_feat_mask.sigmoid()
-        loss = loss + self.coeffs['node_feat_size'] * m.sum()
-        ent = -m * torch.log(m + EPS) - (1 - m) * torch.log(1 - m + EPS)
-        loss = loss + self.coeffs['node_feat_ent'] * ent.mean()
-
-        return loss
+    def __init__(self, model, epochs=200, log=False, **kwargs):
+        self.model = model
+        self.epochs = epochs
+        self.log = log
+        self.coeffs = {}
+        self.coeffs.update(kwargs)
 
     def explain_with_target(self, x, edge_index, target_class, **kwargs):
-        r"""Learns and returns a node feature mask and an edge mask that play a
-        crucial role to explain the prediction made by the GNN for node
-        :attr:`node_idx`.
-
-        Args:
-            node_idx (int): The node to explain.
-            x (Tensor): The node feature matrix.
-            edge_index (LongTensor): The edge indices.
-            **kwargs (optional): Additional arguments passed to the GNN module.
-
-        :rtype: (:class:`Tensor`, :class:`Tensor`)
-        """
-
-        self.model.eval()
-        self.__clear_masks__()
-
-        # Get the initial prediction.
-        if target_class is None:
-            with torch.no_grad():
-                log_logits = self.model(x=x, edge_index=edge_index, **kwargs)
-                pred_label = log_logits.argmax(dim=-1)
-                target_class = pred_label[0].item()
-
-        self.__set_masks__(x, edge_index)
-        self.to(x.device)
-
-        optimizer = torch.optim.Adam([self.node_feat_mask, self.edge_mask],
-                                     lr=self.lr)
-
-        if self.log:  # pragma: no cover
-            pbar = tqdm(total=self.epochs)
-            pbar.set_description('Explain graph')
-
-        for epoch in range(1, self.epochs + 1):
-            optimizer.zero_grad()
-            h = x * self.node_feat_mask.view(1, -1).sigmoid()
-            log_logits = self.model(x=h, edge_index=edge_index, **kwargs)
-            loss = self.__loss__(0, log_logits, target_class)
-            loss.backward()
-            optimizer.step()
-
-            if self.log:  # pragma: no cover
-                pbar.update(1)
-
-        if self.log:  # pragma: no cover
-            pbar.close()
-
-        node_feat_mask = self.node_feat_mask.detach().sigmoid()
-        edge_mask = self.edge_mask.detach().sigmoid()
-
-        self.__clear_masks__()
-
+        explainer = _create_explainer(
+            self.model,
+            task_level="graph",
+            epochs=self.epochs,
+            log=self.log,
+            **self.coeffs,
+        )
+        target = torch.tensor([target_class], dtype=torch.long, device=x.device)
+        explanation = explainer(x, edge_index, target=target, **kwargs)
+        node_feat_mask = explanation.node_feat_mask
+        edge_mask = explanation.edge_mask
+        if node_feat_mask is None:
+            node_feat_mask = torch.ones(1, x.size(1), device=x.device)
+        if edge_mask is None:
+            edge_mask = torch.ones(edge_index.size(1), device=x.device)
+        if node_feat_mask.dim() == 1:
+            node_feat_mask = node_feat_mask.unsqueeze(0)
         return node_feat_mask, edge_mask

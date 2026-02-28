@@ -4,9 +4,9 @@ import networkx as nx
 import torch
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU
-from torch_geometric.nn import GNNExplainer, GINConv, MessagePassing, GCNConv, GraphConv
+from torch_geometric.nn import GINConv, MessagePassing, GCNConv, GraphConv
 
-from experiments.base import BaseExperiment
+from experiments.base import BaseExperiment, remap_graphconv_state_dict
 
 
 class Net(torch.nn.Module):
@@ -54,7 +54,8 @@ class BAShapes(BaseExperiment):
         self.g = nx.from_dict_of_lists(edges)
         self.labels = graph_json['labels']
         model = Net(1, num_classes=4, num_layers=3,concat_features=True,conv_type='GraphConv')
-        model.load_state_dict(torch.load('experiments/BAShapes.pt'))
+        state = torch.load('experiments/BAShapes.pt', map_location='cpu', weights_only=True)
+        model.load_state_dict(remap_graphconv_state_dict(state))
         model.eval()
         self.model = model
 
