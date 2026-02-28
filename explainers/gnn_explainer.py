@@ -42,8 +42,14 @@ class TargetedGNNExplainer:
         )
         target = torch.tensor([target_class], dtype=torch.long, device=x.device)
         explanation = explainer(x, edge_index, target=target, index=node_idx, **kwargs)
-        node_feat_mask = explanation.node_feat_mask
-        edge_mask = explanation.edge_mask
+        try:
+            node_feat_mask = explanation.node_feat_mask
+        except AttributeError:
+            node_feat_mask = None
+        try:
+            edge_mask = explanation.edge_mask
+        except AttributeError:
+            edge_mask = None
         if node_feat_mask is None:
             node_feat_mask = torch.ones(1, x.size(1), device=x.device)
         if edge_mask is None:
@@ -73,8 +79,16 @@ class TargetedGNNExplainerGraph:
         )
         target = torch.tensor([target_class], dtype=torch.long, device=x.device)
         explanation = explainer(x, edge_index, target=target, **kwargs)
-        node_feat_mask = explanation.node_feat_mask
-        edge_mask = explanation.edge_mask
+        # Graph-level explanation may not expose node_feat_mask (e.g. GlobalStorage);
+        # use try/except since getattr does not catch AttributeError from nested __getattr__.
+        try:
+            node_feat_mask = explanation.node_feat_mask
+        except AttributeError:
+            node_feat_mask = None
+        try:
+            edge_mask = explanation.edge_mask
+        except AttributeError:
+            edge_mask = None
         if node_feat_mask is None:
             node_feat_mask = torch.ones(1, x.size(1), device=x.device)
         if edge_mask is None:
